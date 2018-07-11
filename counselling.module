@@ -1,0 +1,679 @@
+<?php
+
+use Drupal\counselling\Storage;
+use Drupal\counselling\CounsellingManager;
+use Drupal\counselling\EmailManager;
+use Drupal\appointment\AppointmentManager;
+use Drupal\counselling\QueryManager;
+
+module_load_include('inc', 'counselling', 'counselling.routing');
+module_load_include('inc', 'counselling', 'counselling.blocks');
+module_load_include('inc', 'counselling', 'counselling.calendar');
+
+define('TERMS_CONDITIONS_PATH', '/bereavement-counselling/terms-conditions');
+define('COUNSELLING_FAQ_PATH', '/bereavement-counselling/frequently-asked-questions');
+define('COUNSELLING_RESOURCES_PATH', '/bereavement-counselling/resources');
+define('COUNSELLING_DONATION_URL', 'https://www.sueryder.org/donate/one-off-donation/bereavement-video-support');
+
+/**
+ * Implements hook_libraries_info().
+ *
+ * For defining external libraries.
+ */
+
+function counselling_libraries_info() {
+  
+  $libraries['fullcalendar'] = [
+    'name' => 'Full Calendar',
+    'vendor url' => 'https://fullcalendar.io/',
+    'download url' => 'https://fullcalendar.io/download/',
+    'version arguments' => [
+      'file' => 'fullcalendar.js',
+      'pattern' => '@(?i:FullCalendar)\sv?([0-9\.a-z]+)@',
+      'lines' => 5,
+    ],
+    'files' => [
+      'js' => ['lib/moment.min.js','fullcalendar.js'],
+      'css' => ['fullcalendar.css'],
+    ],
+  ];
+  
+  $libraries['barrating'] = [
+    'name' => 'Bar rating',
+    'vendor url' => 'https://github.com/antennaio/jquery-bar-rating',
+    'download url' => 'https://github.com/antennaio/jquery-bar-rating',
+    'version arguments' => [
+      'file' => 'jquery.barrating.js',
+      'pattern' => '@(?i:jQuery Bar Rating Plugin)\sv?([0-9\.a-z]+)@',
+      'lines' => 5,
+    ],
+    'files' => [
+      'js' => ['dist/jquery.barrating.min.js'],
+      'css' => [
+        'dist/themes/bars-1to10.css',
+        'dist/themes/bars-horizontal.css',
+        'dist/themes/bars-movie.css',
+        'dist/themes/bars-pill.css',
+        'dist/themes/bars-reversed.css',
+        'dist/themes/bars-square.css',
+        'dist/themes/bootstrap-stars.css',
+        'dist/themes/css-stars.css',
+        'dist/themes/font-awesome-stars.css',
+        'dist/themes/font-awesome-stars-o.css'
+      ],
+    ],
+  ];
+  
+  return $libraries;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function counselling_theme($existing, $type, $theme, $path) {
+  $themes = [];
+  
+  $themes['counselling__page'] = [
+    'template' => 'counselling--page',
+    'variables' => [
+      'key' => NULL,
+      'elements' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__step_indicator'] = [
+    'template' => 'counselling--step-indicator',
+    'variables' => [
+      'steps' => NULL,
+      'current_step' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__calendar'] = [
+    'template' => 'counselling--calendar',
+    'variables' => [
+      'appointments' => NULL,
+      'selected_event' => NULL,
+      'appointment_type' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__terms_of_service'] = [
+    'template' => 'counselling--terms-of-service',
+    'variables' => [
+      'title' => NULL,
+      'text' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__confirmation_details'] = [
+    'template' => 'counselling--confirmation-details',
+    'variables' => [
+      'appointment' => NULL,
+      'practitioner' => NULL,
+      'change_link' => NULL,
+      'change_link_title' => NULL,
+      'heading' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__next_steps'] = [
+    'template' => 'counselling--next-steps',
+    'variables' => [
+      'type' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__service_details'] = [
+    'template' => 'counselling--service-details',
+    'variables' => [
+      'counsellors' => NULL,
+      'volunteers' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__appointment_table'] = [
+    'template' => 'counselling--appointment-table',
+    'variables' => [
+      'title' => NULL,
+      'table' => NULL,
+      'active' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+
+  $themes['counselling__appointment_page'] = [
+    'template' => 'counselling--appointment-page',
+    'variables' => [
+      'elements' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+
+  $themes['counselling__promotional_block'] = [
+    'template' => 'counselling--promotional-block',
+    'variables' => [
+      'subject' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__donation_block'] = [
+    'template' => 'counselling--donation-block',
+    'variables' => [
+      'subject' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+  
+  $themes['counselling__practitioner_choice'] = [
+    'template' => 'counselling--practitioner-choice',
+    'variables' => [
+      'practitioners' => NULL,
+    ],
+    'path' => drupal_get_path('module', 'counselling') . '/templates',
+  ];
+
+  return $themes;
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ */
+
+function template_preprocess_counselling__page(&$variables) {
+  if(!is_null($variables['key'])) {
+    $variables['theme_hook_suggestions'][] = $variables['theme_hook_original'] . '__' . $variables['key'];
+  }
+}
+
+function template_preprocess_counselling__step_indicator(&$variables) {
+  $steps = [];
+  if(!is_null($variables['steps'])) {
+    $steps_array = range(1, $variables['steps']);
+    foreach ($steps_array as $step_number) {
+      $steps[$step_number] = [
+        'value' => $step_number,
+        'classes' => $step_number == $variables['current_step'] ? 'current-step step-value step-' . $step_number : 'step-value step-' . $step_number . '',
+      ];
+    }
+  }
+  $variables['steps'] = $steps;
+}
+
+function template_preprocess_counselling__appointment_page(&$variables) {
+  drupal_add_library('system', 'ui.accordion');
+  drupal_add_js(drupal_get_path('module', 'counselling') . '/js/accordion.js');
+}
+
+/**
+ * Theme preprocess function for theme_entity_property().
+ *
+ * @see theme_entity_property()
+ */
+function counselling_preprocess_entity_property(&$variables, $hook) {
+  
+  $element = $variables['elements'];
+  switch($element['#entity_type']) {
+    case 'appointment':
+    case 'patient':
+    case 'practitioner':
+  
+      /** @var EntityMetadataWrapper $property */
+      $property = $element['#entity_wrapped']->{$element['#property_name']};
+      $info = $property->info();
+      $variables += array(
+        'theme_hook_suggestions' => array(),
+        'attributes_array' => array(),
+      );
+      // Generate variables from element properties.
+      foreach (array('label_hidden', 'label', 'property_name') as $name) {
+        $variables[$name] = check_plain($element['#' . $name]);
+      }
+      
+      $variables['label_display'] = isset($info['label_position']) ? $info['label_position'] : 'above';
+      
+      $variables['title_attributes_array']['class'][] = 'field-label';
+      $variables['attributes_array'] = array_merge($variables['attributes_array'], isset($element['#attributes']) ? $element['#attributes'] : array());
+    
+      $variables['property_name_css'] = strtr($element['#property_name'], '_', '-');
+      $variables['attributes_array']['class'][] = 'field';
+      $variables['attributes_array']['class'][] = 'field-name-' . $variables['property_name_css'];
+      $variables['attributes_array']['class'][] =  isset($info['label_position']) ? 'field-label-' . $info['label_position'] : 'field-label-above';
+      
+    
+      // Add specific suggestions that can override the default implementation.
+      $variables['theme_hook_suggestions'] += array(
+        'entity_property__' . $element['#property_name'],
+        'entity_property__' . $element['#entity_type'] . '__' . $element['#property_name'],
+      );
+      // Populate the content with sensible defaults.
+      if (!isset($variables['content'])) {
+        $variables['content'] = entity_property_default_render_value_by_type($element['#entity_wrapped']->{$element['#property_name']});
+      }
+    
+    //kpr([$property->info(), $variables]);
+      break;
+  }
+  
+}
+
+
+/************************************************
+ *
+ *   Access
+ *
+ ************************************************/
+ 
+
+function counselling_booking_access($op) {
+  global $user;
+  $has_profile = patient_has_profile($user->uid);
+  $is_practitioner = practitioner_has_profile($user->uid);
+  
+  /** @var \Drupal\patient\Entity\Patient $profile */
+  $profile = patient_load_from_uid($user->uid);
+  $is_own_profile = FALSE;
+  $has_type = FALSE;
+  $is_active = FALSE;
+  
+  if($profile) {
+    $is_own_profile = $profile->uid == $user->uid;
+    $is_active = (bool) $profile->status;
+    $has_type = (bool) $profile->type;
+    $has_booked_assessment = $profile->hasBookedAssessment();
+  }
+  
+  switch ($op) {
+    case 'register':
+      return user_access('create patient profile') && !$has_profile && !$is_practitioner ||
+             $has_profile && !$has_type && !$is_practitioner && !$has_booked_assessment;
+      break;
+    case 'book':
+      return $has_profile && $has_type && $is_own_profile && $is_active && !$is_practitioner;
+  }
+  
+}
+
+function counselling_patient_access($op, $patient) {
+  global $user;
+  $has_profile = practitioner_has_profile($user->uid);
+  // todo function to check if own patient
+  $is_own_patient = TRUE;
+  switch ($op) {
+    case 'set-type':
+      return user_access('edit any patient profile') && $has_profile && $is_own_patient;
+      break;
+  }
+  
+}
+
+
+function counselling_booking_confirmation_title() {
+  $storage = new Storage('booking_confirmation');
+  $appointment = !empty($storage->get('appointment')) ? appointment_load($storage->get('appointment')) : FALSE;
+  if ($appointment) {
+    $type = $appointment->type;
+    return 'Your ' . $type . ' has been booked';
+  }
+  else {
+    return '';
+  }
+}
+
+function counselling_profile_title($entity_type, $entity) {
+  switch ($entity_type) {
+    case 'patient':
+    case 'practitioner':
+      return $entity->fullname();
+      break;
+    default:
+      return 'Profile';
+      break;
+  }
+}
+
+/************************************************
+ *
+ *   E-Mail
+ *
+ ************************************************/
+
+/**
+ * Implement hook_mail
+ */
+function counselling_mail($key, &$message, $params) {
+  $message['subject'] = $params['subject'];
+  $message['body'][] = $params['body'];
+}
+
+/**
+* Implements hook_preprocess_HOOK() for swiftmailer.tpl.php.
+*/
+function counselling_preprocess_swiftmailer(&$variables) {
+  $variables['theme_hook_suggestions'][] = 'swiftmailer__' . $variables['module'];
+  $variables['theme_hook_suggestions'][] = 'swiftmailer__' . $variables['module'] . '__' . $variables['key'];
+}
+
+
+
+
+/*************************************************
+ *
+ *  Cron jobs
+ *
+ ************************************************/
+
+
+function counselling_cronapi($op, $job = NULL) {
+  $items['appointment_send_reminder_hour'] = [
+    'description' => 'Send appointment reminder 1 hour before',
+    'rule' => '0,30 * * * *',
+    'weight' => 1,
+    'callback' => 'counselling_appointment_send_reminder',
+    'arguments' => ['hour', time()],
+  ];
+  $items['appointment_send_reminder_day'] = [
+    'description' => 'Send appointment reminder 1 hour before',
+    'rule' => '0,30 * * * *',
+    'weight' => 2,
+    'callback' => 'counselling_appointment_send_reminder',
+    'arguments' => ['day', time()],
+  ];
+
+  return $items;
+}
+
+function counselling_appointment_send_reminder($type, $time) {
+  
+  $time = strtotime(date('Y-m-d H:i', $time));
+  
+  $counsellingManager = new CounsellingManager();
+  $appointments = $counsellingManager->getReminderAppointments($type, $time);
+  
+  if(!empty($appointments)) {
+    $sender = new EmailManager();
+    foreach ($appointments as $appointment) {
+      
+      $appointmentManager = new AppointmentManager($appointment);
+      if ($appointmentManager->patientWantsReminders()) {
+        $sender->sendReminder($type, $appointment);
+        watchdog('counselling', ucfirst($type) .' reminder sent for the appointment ' . $appointment->id . ' booked for ' . date('d/m/y H:i', $time));
+      }
+      
+    }
+  }
+  else {
+    watchdog('counselling', 'No appointments found to be reminded');
+  }
+}
+
+
+/*************************************************
+ *
+ *  Tokens
+ *
+ ************************************************/
+
+/**
+ * Implements hook_token_info().
+ */
+function counselling_token_info() {
+  $info['tokens']['appointment']['cancel-url'] = array(
+    'name' => t('Cancel Url'),
+    'description' => t('URL for cancelling the appoinment.'),
+    'type' => 'url',
+  );
+  $info['tokens']['appointment']['change-url'] = array(
+    'name' => t('Change Url'),
+    'description' => t('URL for changing the appoinment.'),
+    'type' => 'url',
+  );
+  $info['tokens']['appointment']['feedback-url'] = array(
+    'name' => t('Feedback Url'),
+    'description' => t('URL to the leave feedback form.'),
+    'type' => 'url',
+  );
+  $info['tokens']['appointment']['room-url'] = array(
+    'name' => t('Room Url'),
+    'description' => t('URL to the leave feedback form.'),
+  );
+
+  $info['tokens']['patient']['book-url'] = array(
+    'name' => t('Book Url'),
+    'description' => t('URL to the booking form.'),
+    'type' => 'url',
+  );
+  $info['tokens']['patient']['profile-url'] = array(
+    'name' => t('Profile Url'),
+    'description' => t('URL to the patient profile.'),
+    'type' => 'url',
+  );
+  $info['tokens']['patient']['public-url'] = array(
+    'name' => t('Profile public Url'),
+    'description' => t('URL to the public patient profile.'),
+    'type' => 'url',
+  );
+  
+  $info['tokens']['practitioner']['profile-url'] = array(
+    'name' => t('Profile Url'),
+    'description' => t('URL to the practitioner profile.'),
+    'type' => 'url',
+  );
+  $info['tokens']['practitioner']['public-url'] = array(
+    'name' => t('Profile public Url'),
+    'description' => t('URL to the public practitioner profile.'),
+    'type' => 'url',
+  );
+  $info['tokens']['practitioner']['type-replacement'] = array(
+    'name' => t('Practitioner type replacement'),
+    'description' => t('Practitioner type token replacement'),
+    'type' => 'url',
+  );
+  
+  return $info;
+}
+
+
+/**
+ * Implements hook_tokens().
+ */
+function counselling_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  
+  $replacements = array();
+  
+  $url_options = array('absolute' => TRUE);
+  if (isset($options['language'])) {
+    $url_options['language'] = $options['language'];
+    $language_code = $options['language']->language;
+  }
+  else {
+    $language_code = NULL;
+  }
+  
+  $sanitize = !empty($options['sanitize']);
+  
+  if ($type == 'appointment' && !empty($data['appointment'])) {
+    /** @var \Drupal\appointment\Entity\Appointment $appoinment */
+    $appointment = $data['appointment'];
+  
+    // Replace individual tokens that have an exact replacement.
+    foreach ($tokens as $name => $original) {
+      switch ($name) {
+        case 'cancel-url':
+          $replacements[$original] = $appointment->id ? url('appointment/' . $appointment->id . '/cancel', $url_options) : '';
+          break;
+        case 'change-url':
+          $replacements[$original] = $appointment->id ? url('appointment/' . $appointment->id . '/change', $url_options) : '';
+          break;
+        case 'feedback-url':
+          $replacements[$original] = $appointment->id ? url('appointment/' . $appointment->id . '/feedback', $url_options) : '';
+          break;
+        case 'room-url':
+          $replacements[$original] = $appointment->id ? url('appointment/' . $appointment->id . '/room', $url_options) : '';
+          break;
+      }
+    }
+
+    if ($appointment->id) {
+      if ($url_tokens = token_find_with_prefix($tokens, 'cancel-url')) {
+        $replacements += token_generate('url', $url_tokens, ['path' => 'appointment/' . $appointment->id . '/cancel'], $options);
+      }
+      if ($url_tokens = token_find_with_prefix($tokens, 'change-url')) {
+        $replacements += token_generate('url', $url_tokens, ['path' => 'appointment/' . $appointment->id . '/change'], $options);
+      }
+      if ($url_tokens = token_find_with_prefix($tokens, 'feedback-url')) {
+        $replacements += token_generate('url', $url_tokens, ['path' => 'appointment/' . $appointment->id . '/feedback'], $options);
+      }
+      if ($url_tokens = token_find_with_prefix($tokens, 'room-url')) {
+        $replacements += token_generate('url', $url_tokens, ['path' => 'appointment/' . $appointment->id . '/room'], $options);
+      }
+    }
+  }
+  
+  if ($type == 'patient' && !empty($data['patient'])) {
+    /** @var \Drupal\patient\Entity\Patient $patient */
+    $patient = $data['patient'];
+    
+    // Replace individual tokens that have an exact replacement.
+    foreach ($tokens as $name => $original) {
+      switch ($name) {
+        case 'book-url':
+          $replacements[$original] = 'bereavement-counselling/book/new';
+          break;
+        case 'profile-url':
+          $replacements[$original] = $patient->profileUrl();
+          break;
+        case 'public-url':
+          $replacements[$original] = $patient->publicUrl();
+          break;
+      }
+    }
+  
+    if ($url_tokens = token_find_with_prefix($tokens, 'book-url')) {
+      $replacements += token_generate('url', $url_tokens, ['path' => 'bereavement-counselling/book/new'], $options);
+    }
+  
+    if ($url_tokens = token_find_with_prefix($tokens, 'profile-url')) {
+      $replacements += token_generate('url', $url_tokens, ['path' => $patient->profileUrl()], $options);
+    }
+  
+    if ($url_tokens = token_find_with_prefix($tokens, 'public-url')) {
+      $replacements += token_generate('url', $url_tokens, ['path' => $patient->publicUrl()], $options);
+    }
+  }
+  
+  if ($type == 'practitioner' && !empty($data['practitioner'])) {
+    /** @var \Drupal\practitioner\Entity\Practitioner $practitioner */
+    $practitioner = $data['practitioner'];
+    
+    // Replace individual tokens that have an exact replacement.
+    foreach ($tokens as $name => $original) {
+      switch ($name) {
+        case 'profile-url':
+          $replacements[$original] = $practitioner->profileUrl();
+          break;
+        case 'public-url':
+          $replacements[$original] = $practitioner->publicUrl();
+          break;
+        case 'type-replacement':
+          $replacements[$original] = $practitioner->type == 'counsellor' ? 'professional bereavement counsellor' : 'fully-trained bereavement support worker';
+          break;
+      }
+    }
+    
+    if ($url_tokens = token_find_with_prefix($tokens, 'profile-url')) {
+      $replacements += token_generate('url', $url_tokens, ['path' => $practitioner->profileUrl()], $options);
+    }
+    
+    if ($url_tokens = token_find_with_prefix($tokens, 'public-url')) {
+      $replacements += token_generate('url', $url_tokens, ['path' => $practitioner->publicUrl()], $options);
+    }
+  }
+  
+  return $replacements;
+}
+/*************************************************
+ *
+ *  Entities
+ *
+ ************************************************/
+
+/**
+ * Implements hook_entity_delete().
+ */
+function counselling_entity_delete($entity, $type) {
+  switch ($type) {
+    case 'patient':
+      /** @var \Drupal\patient\Entity\Patient $patient */
+      $patient = $entity;
+      $counsellingManager = new CounsellingManager();
+      $appointments = $counsellingManager->getAppoinmentsByPatient($patient);
+      foreach ($appointments as $appointment) {
+        if ($appointment->patient == $patient->identifier()) {
+          watchdog('counselling', 'Appointment @id has been deleted when cancelling patient @name', ['@id' => $appointment->id, '@name' => $patient->fullname()]);
+          $appointment->delete();
+        }
+      }
+      break;
+    case 'practitioner':
+      /** @var \Drupal\practitioner\Entity\Practitioner $practitioner */
+      $practitioner = $entity;
+      $counsellingManager = new CounsellingManager();
+      $appointments = $counsellingManager->getAppoinmentsByPractitioner($practitioner);
+      foreach ($appointments as $appointment) {
+        if ($appointment->practitioner == $practitioner->identifier()) {
+          watchdog('counselling', 'Appointment @id has been deleted when cancelling practitioner @name', ['@id' => $appointment->id, '@name' => $practitioner->fullname()]);
+          $appointment->delete();
+        }
+      }
+      break;
+  }
+}
+
+/*************************************************
+ *
+ *  Date
+ *
+ ************************************************/
+
+/**
+ * Implements hook_date_formats().
+ */
+function counselling_date_formats() {
+  $formats = [];
+  
+  $formats['day_long'] = [
+    'type' => 'day_long',
+    'format' => 'D, jS F Y',
+    'locales' => [],
+  ];
+  
+  $formats['day_short'] = [
+    'type' => 'day_short',
+    'format' => 'd/m/Y',
+    'locales' => [],
+  ];
+  
+  return $formats;
+}
+
+/**
+ * Implements hook_date_format_types().
+ */
+function counselling_date_format_types() {
+  
+  $types = [];
+  
+  $types['day_long'] = t('Day - long');
+  $types['day_short'] = t('Day - short');
+  
+  return $types;
+}

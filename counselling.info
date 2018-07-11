@@ -1,0 +1,11 @@
+name = Counselling System
+description = Custom forms, Controllers and entity managers for the Bereavement Counselling system
+core = 7.x
+package = SR Counselling
+
+dependencies[] = xautoload
+dependencies[] = elysia_cron
+dependencies[] = appointment
+dependencies[] = practitioner
+dependencies[] = patient
+

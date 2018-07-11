@@ -1,0 +1,9 @@
+name = Patient
+description = Implementation of entity Patient
+core = 7.x
+package = SR Counselling
+
+dependencies[] = entity
+dependencies[] = xautoload
+
+files[] = src/Form/patient_form.php

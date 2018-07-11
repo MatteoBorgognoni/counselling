@@ -1,0 +1,10 @@
+#time-validator input {
+    height: 1px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+
+#time-validator input:focus {
+    box-shadow: none !important;
+}

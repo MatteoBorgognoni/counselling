@@ -1,0 +1,422 @@
+<?php
+
+/**
+ * @file
+ * Implementation of Entity Patient.
+ */
+
+use Drupal\patient\Entity\Patient;
+
+// Set default entity form in external file
+module_load_include('php', 'patient', 'src/Form/patient_form');
+// Set menu definitions in external file
+module_load_include('inc', 'patient', 'patient.routing');
+
+
+/**
+ * Implements hook_entity_info().
+ */
+
+function patient_entity_info() {
+  $return['patient'] = [
+    'label' => t('Patient profile'),
+    // The entity class and controller class extend the default entity classes.
+    'entity class' => 'Drupal\patient\Entity\Patient',
+    'controller class' => 'Drupal\patient\Entity\PatientController',
+    'views controller class' => 'Drupal\patient\Entity\PatientViewsController',
+    'extra fields controller class' => 'Drupal\patient\Entity\PatientExtraFieldsController',
+    'metadata controller class' => 'Drupal\patient\Entity\PatientMetadataController',
+    'base table' => 'patient',
+    'fieldable' => TRUE,
+    'exportable' => TRUE,
+    'entity keys' => [
+      'id' => 'id',
+      'label' => 'email',
+      'bundle' => 'bundle',
+    ],
+    // Bundles are defined by the types below.
+    'bundles' => [
+      'patient' => [
+        'label' => t('Patient'),
+        'admin' => [
+          'path' => 'admin/structure/patient/manage',
+          'access arguments' => ['administer patient'],
+        ],
+      ],
+    ],
+    'bundle keys' => ['bundle' => 'bundle'],
+    'label callback' => 'patient_label',
+    'uri callback' => 'entity_class_uri',
+    'access callback' => 'patient_access',
+    'module' => 'patient',
+    // The information below is used by the Controller;
+    // which extends the EntityDefaultUIController.
+    'admin ui' => [
+      'path' => 'admin/content/patient',
+      'file' => 'src/Form/patient_form.php',
+      'controller class' => 'Drupal\patient\Entity\PatientUIController',
+      'menu wildcard' => '%patient',
+    ],
+    'view modes' => [
+      'public' => [
+        'label' => 'Public',
+        'custom settings' => TRUE,
+      ],
+    ],
+  ];
+
+  return $return;
+}
+
+
+
+function patient_bundle_config() {
+  drupal_goto('admin/content/patient');
+}
+
+
+
+/**
+ * Implements hook_permission().
+ */
+function patient_permission() {
+  // We set up permisssions to manage entity types, manage all entities and the
+  // permissions for each individual entity.
+  $permissions = [
+    'administer patient' => [
+      'title' => t('Administer patients'),
+      'description' => t('Edit and delete all patients profiles'),
+    ],
+    'create patient profile' => [
+      'title' => t('Create patient profile'),
+    ],
+    'view any patient profile' => [
+      'title' => t('View any patient profile'),
+    ],
+    'view own patient profile' => [
+      'title' => t('View own patient profile'),
+    ],
+    'edit any patient profile' => [
+      'title' => t('Edit any patient profile'),
+    ],
+    'edit own patient profile' => [
+      'title' => t('Edit own patient profile'),
+    ],
+  ];
+  
+  return $permissions;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function patient_theme() {
+  return [
+    'patient' => [
+      'render element' => 'elements',
+      'template' => 'patient',
+    ],
+  ];
+}
+
+/**
+ * Implements hook_preprocess_entity().
+ */
+function patient_preprocess_entity(&$variables) {
+  $entity_type = $variables['elements']['#entity_type'];
+  if($entity_type == 'patient') {
+    $variables['theme_hook_suggestions'] = [];
+    $variables['theme_hook_suggestions'][] = $entity_type;
+    $variables['theme_hook_suggestions'][] = $entity_type . '__' . $variables['view_mode'];
+    $variables['theme_hook_suggestions'][] = $entity_type . '__' . $variables['id'];
+  }
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function patient_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Add action link 'admin/structure/patient/add'
+  // on 'admin/structure/patient'.
+  if ($root_path == 'admin/content/patient') {
+    $item = menu_get_item('admin/content/patient/add');
+    if ($item['access']) {
+      $data['actions']['output'][] = [
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      ];
+    }
+  }
+}
+
+/**
+ * Determines whether the given user has access to a Patient.
+ *
+ * @param string $op
+ *   The operation being performed. One of 'view', 'update', 'create', 'delete'
+ *   or just 'edit' (being the same as 'create' or 'update').
+ *
+ * @param object $entity
+ *   Optionally a Patient or a Patient type to check access for.
+ *   If nothing is given, access for all Patient is determined.
+ *
+ * @param object $account
+ *   The user to check for. Leave it to NULL to check for the global user.
+ *
+ * @return bool
+ *   Whether access is allowed or not.
+ */
+function patient_access($op, $entity = NULL, $account = NULL) {
+  if (user_access('administer patient', $account)) {
+    return TRUE;
+  }
+  switch ($op) {
+    case 'view':
+      return user_access('view any patient profile', $account);
+      break;
+  
+    case 'edit':
+    case 'update':
+      return user_access('edit any patient profile', $account);
+      break;
+  }
+
+  return FALSE;
+}
+
+
+
+function patient_user_access($op, $account) {
+  
+  $has_profile = patient_has_profile($account->uid);
+  $is_active = FALSE;
+  $is_profile_owner = FALSE;
+  $has_booked_assessment = FALSE;
+  
+  if($has_profile) {
+    /** @var Patient $profile */
+    $profile = patient_load_from_uid($account->uid);
+    $is_active = (bool) $profile->status;
+    $is_profile_owner = isset($profile->uid) && $profile->uid == $account->uid;
+    $has_booked_assessment = $profile->hasBookedAssessment();
+  }
+  switch ($op) {
+    case 'view':
+      return $has_profile && $is_profile_owner;
+      break;
+    case 'book':
+      return $has_profile && $is_profile_owner && $is_active && !$has_booked_assessment;
+      break;
+    case 'enable':
+      //return $has_profile && $is_profile_owner && !$is_active;
+      return user_access('view any appointment');
+      break;
+  }
+  
+  return $has_profile && $is_profile_owner && $is_active;
+}
+
+
+
+/**
+ * Entity label callback.
+ */
+function patient_label($entity, $entity_type) {
+  return empty($entity) ? t('New Patient') : $entity->fullname();
+}
+
+
+/**
+ * Fetch a Patient object.
+ *
+ * @param int $id
+ *   Integer specifying the patient id.
+ *
+ * @return object
+ *   A fully-loaded object or FALSE if it cannot be loaded.
+ *
+ * @see entity_load_single()
+ */
+function patient_load($id) {
+  return entity_load_single('patient', $id);
+}
+
+function patient_id_optional_load($id = NULL) {
+  if (!isset($id)) {
+    $uid = $GLOBALS['user']->uid;
+    return patient_load_from_uid($uid);
+  }
+  return patient_load($id);
+}
+
+/**
+ * Load multiple Patient based on certain conditions.
+ *
+ * @param array $ids
+ *   An array of Patient IDs.
+ *
+ * @param array $conditions
+ *   An array of conditions to match against the patient table.
+ *
+ * @param bool $reset
+ *   A boolean indicating that the internal cache should be reset.
+ *
+ * @return array
+ *   An array of objects, indexed by id.
+ *
+ * @see entity_load()
+ * @see patient_load()
+ */
+function patient_load_multiple($ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('patient', $ids, $conditions, $reset);
+}
+
+function patient_has_profile($uid) {
+  $query = db_select('patient', 'p')
+    ->fields('p', ['id'])
+    ->distinct()
+    ->condition('uid', $uid, '=')
+    ->execute();
+  
+  $result = !empty($query->fetchObject());
+  return $result;
+}
+
+function patient_load_from_uid($uid) {
+  $query = db_select('patient', 'p')
+    ->fields('p', ['id'])
+    ->distinct()
+    ->condition('uid', $uid, '=')
+    ->execute();
+  
+  $result = $query->fetchObject();
+  
+  if(!empty($result)) {
+    return patient_load($result->id);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function patient_load_from_email($email) {
+  $query = db_select('patient', 'p')
+    ->fields('p', ['id'])
+    ->distinct()
+    ->condition('email', trim($email), '=')
+    ->execute();
+  
+  $result = $query->fetchObject();
+  
+  if(!empty($result)) {
+    return patient_load($result->id);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function patient_from_user_load($id = NULL) {
+  if (!isset($id)) {
+    $uid = $GLOBALS['user']->uid;
+    $id = patient_has_profile($uid);
+  }
+  return patient_load($id);
+}
+
+/**
+ * Implements hook_entity_load().
+ */
+function patient_entity_load($entities, $type) {
+  switch ($type) {
+    case 'user':
+      foreach ($entities as $uid => $user) {
+        if ($patient = patient_load_from_uid($user->uid)) {
+          $user->patient = $patient;
+        }
+      }
+      break;
+  }
+}
+
+
+/**
+ * Deletes a Patient.
+ */
+function patient_delete(Patient $patient) {
+  $patient->delete();
+}
+
+/**
+ * Delete multiple Patient.
+ *
+ * @param array $ids
+ *   An array of Patient IDs.
+ */
+function patient_delete_multiple(array $ids) {
+  return entity_delete_multiple('patient', $ids);
+}
+
+/**
+ * Create a Patient object.
+ */
+function patient_create($values = array()) {
+  return entity_create('patient', $values);
+}
+
+/**
+ * Saves a Patient to the database.
+ *
+ * @param string $patient
+ *   The Patient object.
+ */
+function patient_save($patient) {
+  return entity_save('patient', $patient);
+}
+
+
+/**
+ * Menu title callback for showing individual entities.
+ */
+function patient_page_title(Patient $patient) {
+  return $patient->fullname();
+}
+
+/**
+ * Sets up content to show an individual Patient.
+ */
+function patient_page_view($patient, $view_mode = 'full') {
+  return entity_view('patient', array($patient), $view_mode);
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function patient_form_alter(&$form, &$form_state, $form_id) {
+}
+
+function patient_get_statuses() {
+  $statuses = [
+    0 => 'Blocked',
+    1 => 'Active',
+  ];
+  return $statuses;
+}
+
+function patient_get_types() {
+  $statuses = [
+    NULL => 'Not assessed',
+    'counsellor' => 'Counsellor',
+    'volunteer' => 'Support worker',
+  ];
+  return $statuses;
+}
+
+function patient_get_reminder_options() {
+  $statuses = [
+    0 => 'No',
+    1 => 'Yes',
+  ];
+  return $statuses;
+}
+

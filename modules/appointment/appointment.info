@@ -1,0 +1,13 @@
+name = Appointment
+description = Implementation of entity Appointment
+core = 7.x
+package = SR Counselling
+
+dependencies[] = entity
+dependencies[] = xautoload
+dependencies[] = patient
+dependencies[] = practitioner
+dependencies[] = date_popup_timepicker
+
+files[] = src/Form/appointment_form.php
+files[] = appointment.routing.inc

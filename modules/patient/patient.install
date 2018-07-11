@@ -1,0 +1,108 @@
+<?php
+
+/**
+ * @file
+ * patient install schema.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function patient_schema() {
+  $schema = [];
+
+  $schema['patient'] = [
+    'description' => 'The base table for Patient entities.',
+    'fields' => [
+      'id' => [
+        'description' => 'Primary Key: Identifier for a Patient.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'bundle' => [
+        'description' => 'The type of this profile.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'type' => [
+        'description' => 'The type of this profile.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ],
+      'first_name' => [
+        'description' => 'The first name for the Patient.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'last_name' => [
+        'description' => 'The last name for the Patient.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'email' => [
+        'description' => 'The email for the Patient.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'reminder_email' => [
+        'description' => 'The integer representing whether the Patient wants to receive email reminders',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+      'uid' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL,
+        'description' => "The {users}.uid of the user holding the Patient.",
+      ],
+      'status' => [
+        'description' => 'The integer representing the current status of the Patient',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 1,
+      ],
+      'created' => [
+        'description' => 'The Unix timestamp when the Patient was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+      'changed' => [
+        'description' => 'The Unix timestamp when the Patient was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+    ] + entity_exportable_schema_fields(),
+    'primary key' => ['id', 'email'],
+    'unique keys' => [
+      'email' => ['email'],
+    ],
+    'foreign keys' => [
+      'patient_user' => [
+        'table' => 'users',
+        'columns' => ['uid' => 'uid'],
+      ],
+    ],
+    'indexes' => [
+      'type' => ['type'],
+    ],
+  ];
+
+  return $schema;
+}

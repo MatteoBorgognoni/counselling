@@ -1,0 +1,472 @@
+<?php
+
+/**
+ * @file
+ * Implementation of Entity Practitioner.
+ */
+
+use Drupal\practitioner\Entity\Practitioner;
+
+// Set default entity form in external file
+module_load_include('php', 'practitioner', 'src/Form/practitioner_form');
+// Set menu definitions in external file
+module_load_include('inc', 'practitioner', 'practitioner.routing');
+
+
+/**
+ * Implements hook_entity_info().
+ */
+
+function practitioner_entity_info() {
+  $return['practitioner'] = [
+    'label' => t('Practitioner profile'),
+    // The entity class and controller class extend the default entity classes.
+    'entity class' => 'Drupal\practitioner\Entity\Practitioner',
+    'controller class' => 'Drupal\practitioner\Entity\PractitionerController',
+    'views controller class' => 'EntityDefaultViewsController',
+    'extra fields controller class' => 'Drupal\practitioner\Entity\PractitionerExtraFieldsController',
+    'metadata controller class' => 'Drupal\practitioner\Entity\PractitionerMetadataController',
+    'base table' => 'practitioner',
+    'fieldable' => TRUE,
+    'exportable' => TRUE,
+    'entity keys' => [
+      'id' => 'id',
+      'label' => 'email',
+      'bundle' => 'bundle',
+    ],
+    // Bundles are defined by the types below.
+    'bundles' => [
+      'practitioner' => [
+        'label' => t('Practitioner'),
+        'admin' => [
+          'path' => 'admin/structure/practitioner/manage',
+          'access arguments' => ['administer practitioner'],
+        ],
+      ],
+    ],
+    'bundle keys' => ['bundle' => 'bundle'],
+    'label callback' => 'practitioner_label',
+    'uri callback' => 'entity_class_uri',
+    'access callback' => 'practitioner_access',
+    'module' => 'practitioner',
+    // The information below is used by the Controller;
+    // which extends the EntityDefaultUIController.
+    'admin ui' => [
+      'path' => 'admin/content/practitioner',
+      'file' => 'src/Form/practitioner_form.php',
+      'controller class' => 'Drupal\practitioner\Entity\PractitionerUIController',
+      'menu wildcard' => '%practitioner',
+    ],
+    'view modes' => [
+      'badge' => [
+        'label' => 'Badge',
+        'custom settings' => TRUE,
+      ],
+    ],
+  ];
+
+  return $return;
+}
+
+
+
+function practitioner_bundle_config() {
+  drupal_goto('admin/content/practitioner');
+}
+
+
+
+/**
+ * Implements hook_permission().
+ */
+function practitioner_permission() {
+  // We set up permisssions to manage entity types, manage all entities and the
+  // permissions for each individual entity.
+  $permissions = array(
+    'administer practitioner' => array(
+      'title' => t('Administer practitioners'),
+      'description' => t('Edit and delete all practitioners profiles'),
+    ),
+    'create practitioner profile' => array(
+      'title' => t('Create practitioner profile'),
+    ),
+    'view any practitioner profile' => array(
+      'title' => t('View any practitioner profile'),
+    ),
+    'view any practitioner badge' => array(
+      'title' => t('View any practitioner badge'),
+    ),
+    'view own practitioner profile' => array(
+      'title' => t('View own practitioner profile'),
+    ),
+    'edit any practitioner profile' => array(
+      'title' => t('Edit any practitioner profile'),
+    ),
+    'edit own practitioner profile' => array(
+      'title' => t('Edit own practitioner profile'),
+    ),
+    'disable practitioner profile' => array(
+      'title' => t('Disable practitioner profile'),
+    ),
+    'delete practitioner profile' => array(
+      'title' => t('Delete practitioner profile'),
+    ),
+  );
+
+  return $permissions;
+}
+
+
+/**
+ * Determines whether the given user has access to a Practitioner.
+ *
+ * @param string $op
+ *   The operation being performed. One of 'view', 'update', 'create', 'delete'
+ *   or just 'edit' (being the same as 'create' or 'update').
+ *
+ * @param object $entity
+ *   Optionally a Practitioner or a Practitioner type to check access for.
+ *   If nothing is given, access for all Practitioner is determined.
+ *
+ * @param object $account
+ *   The user to check for. Leave it to NULL to check for the global user.
+ *
+ * @return bool
+ *   Whether access is allowed or not.
+ */
+function practitioner_access($op, $entity = NULL, $account = NULL) {
+
+  
+  if (empty($account)) {
+    global $user;
+    $account = $user;
+  }
+  
+  $has_profile = practitioner_has_profile($account->uid);
+  
+  if (user_access('administer practitioner', $account)) {
+    return TRUE;
+  }
+  
+  switch ($op) {
+    case 'create':
+      return user_access('create practitioner profile', $account) && !$has_profile;
+      break;
+    case 'view':
+      return user_access('view any practitioner profile', $account) || user_access('view own practitioner profile', $account) && $has_profile;
+      break;
+    
+    case 'update':
+    case 'edit':
+      return user_access('edit any practitioner profile', $account) || user_access('edit own practitioner profile', $account) && $has_profile;
+      break;
+    case 'disable':
+      return user_access('disable practitioner profile', $account);
+      break;
+    case 'delete':
+      return user_access('delete practitioner profile', $account);
+      break;
+      
+  }
+  
+  return FALSE;
+}
+
+function practitioner_user_access($op, $account) {
+  
+  global $user;
+  
+  $has_profile = practitioner_has_profile($account->uid);
+  $profile = practitioner_load_from_uid($account->uid);
+  $is_owner = isset($profile->uid) && $profile->uid == $user->uid;
+  
+  switch ($op) {
+    case 'create':
+      return user_access('create practitioner profile') && !$has_profile;
+      break;
+    case 'view':
+      if (!$has_profile) {
+        return user_access('create practitioner profile');
+      }
+      return user_access('view own practitioner profile') && $has_profile && $is_owner;
+      break;
+    case 'edit':
+      return user_access('edit own practitioner profile') && $has_profile && $is_owner;
+      break;
+  }
+  
+  return FALSE;
+}
+
+
+/**
+ * Implements hook_theme().
+ */
+function practitioner_theme() {
+  return array(
+    'practitioner' => array(
+      'render element' => 'elements',
+      'template' => 'practitioner',
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_preprocess_entity().
+ */
+function practitioner_preprocess_entity(&$variables) {
+  $entity_type = $variables['elements']['#entity_type'];
+  if($entity_type == 'practitioner') {
+    $variables['theme_hook_suggestions'] = [];
+    $variables['theme_hook_suggestions'][] = $entity_type;
+    $variables['theme_hook_suggestions'][] = $entity_type . '__' . $variables['view_mode'];
+    $variables['theme_hook_suggestions'][] = $entity_type . '__' . $variables['id'];
+  }
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function practitioner_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Add action link 'admin/structure/practitioner/add'
+  // on 'admin/structure/practitioner'.
+  if ($root_path == 'admin/content/practitioner') {
+    $item = menu_get_item('admin/content/practitioner/add');
+    if ($item['access']) {
+      $data['actions']['output'][] = array(
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      );
+    }
+  }
+}
+
+
+
+/**
+ * Entity label callback.
+ */
+function practitioner_label($entity, $entity_type) {
+  return empty($entity) ? t('New Practitioner') : $entity->fullname();
+}
+
+
+/**
+ * Fetch a Practitioner object.
+ *
+ * @param int $id
+ *   Integer specifying the practitioner id.
+ *
+ * @return object
+ *   A fully-loaded object or FALSE if it cannot be loaded.
+ *
+ * @see entity_load_single()
+ */
+function practitioner_load($id) {
+  return entity_load_single('practitioner', $id);
+}
+
+function practitioner_id_optional_load($id = NULL) {
+  if (!isset($id)) {
+    $uid = $GLOBALS['user']->uid;
+    return practitioner_load_from_uid($uid);
+  }
+  return practitioner_load($id);
+}
+
+/**
+ * Load multiple Practitioner based on certain conditions.
+ *
+ * @param array $ids
+ *   An array of Practitioner IDs.
+ *
+ * @param array $conditions
+ *   An array of conditions to match against the practitioner table.
+ *
+ * @param bool $reset
+ *   A boolean indicating that the internal cache should be reset.
+ *
+ * @return array
+ *   An array of objects, indexed by id.
+ *
+ * @see entity_load()
+ * @see practitioner_load()
+ */
+function practitioner_load_multiple($ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('practitioner', $ids, $conditions, $reset);
+}
+
+function practitioner_has_profile($uid) {
+  $query = db_select('practitioner', 'p')
+    ->fields('p', ['id'])
+    ->distinct()
+    ->condition('uid', $uid, '=')
+    ->execute();
+  
+  $result = !empty($query->fetchObject());
+  return $result;
+}
+
+function practitioner_load_from_uid($uid) {
+  $query = db_select('practitioner', 'p')
+    ->fields('p', ['id'])
+    ->distinct()
+    ->condition('uid', $uid, '=')
+    ->execute();
+  
+  $result = $query->fetchObject();
+  
+  if(!empty($result)) {
+    return practitioner_load($result->id);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+function practitioner_from_user_load($id = NULL) {
+  if (!isset($id)) {
+    $uid = $GLOBALS['user']->uid;
+    $id = practitioner_has_profile($uid);
+  }
+  return practitioner_load($id);
+}
+
+/**
+ * Implements hook_entity_load().
+ */
+function practitioner_entity_load($entities, $type) {
+  switch ($type) {
+    case 'user':
+      foreach ($entities as $uid => $user) {
+        if ($practitioner = practitioner_load_from_uid($user->uid)) {
+          $user->practitioner = $practitioner;
+        }
+      }
+      break;
+  }
+}
+
+/**
+ * Deletes a Practitioner.
+ */
+function practitioner_delete(Practitioner $practitioner) {
+  $practitioner->delete();
+}
+
+/**
+ * Delete multiple Practitioner.
+ *
+ * @param array $ids
+ *   An array of Practitioner IDs.
+ */
+function practitioner_delete_multiple(array $ids) {
+  return entity_delete_multiple('practitioner', $ids);
+}
+
+/**
+ * Create a Practitioner object.
+ */
+function practitioner_create($values = array()) {
+  return entity_create('practitioner', $values);
+}
+
+/**
+ * Saves a Practitioner to the database.
+ *
+ * @param string $practitioner
+ *   The Practitioner object.
+ */
+function practitioner_save($practitioner) {
+  return entity_save('practitioner', $practitioner);
+}
+
+
+/**
+ * Menu title callback for showing individual entities.
+ */
+function practitioner_page_title(Practitioner $practitioner) {
+  return $practitioner->fullname();
+}
+
+/**
+ * Sets up content to show an individual Practitioner.
+ */
+function practitioner_page_view($practitioner, $view_mode = 'full') {
+  return entity_view('practitioner', array($practitioner), $view_mode);
+}
+
+/**
+ * @param $practitioner
+ * @return bool
+ */
+function practitioner_badge($practitioner) {
+  $badge = practitioner_page_view($practitioner, 'badge');
+  return render($badge);
+}
+
+/**
+ * Sets up content to show an individual Practitioner.
+ */
+function practitioner_page_edit($practitioner, $view_mode = 'full') {
+  return entity_ui_get_form('practitioner', $practitioner, 'edit');
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function practitioner_form_alter(&$form, &$form_state, $form_id) {
+
+}
+
+/**
+ * Implements hook_user_login().
+ */
+function practitioner_user_login(&$edit, $account) {
+  if (practitioner_has_profile($account->uid)) {
+    drupal_goto('user/' . $account->uid . '/counselling/practitioner/appointments');
+  }
+}
+
+function practitioner_get_statuses() {
+  $statuses = [
+    0 => 'Blocked',
+    1 => 'Active',
+  ];
+  return $statuses;
+}
+
+function practitioner_get_types() {
+  $statuses = [
+    NULL => 'Not assessed',
+    'counsellor' => 'Counsellor',
+    'volunteer' => 'Support worker',
+  ];
+  return $statuses;
+}
+
+
+// returns users with edit own prsctitioner profile permission
+function practitioner_get_eligible_users() {
+  $users = [];
+  
+  $query = db_select('users', 'u');
+  $query->leftJoin('users_roles', 'ur', 'u.uid = ur.uid');
+  $query->leftJoin('role_permission', 'p', 'ur.rid = p.rid');
+  $query->condition('u.uid', 0, '!=');
+  $query->condition('u.uid', 1, '!=');
+  $query->isNotNull('p.permission');
+  $query->condition('p.permission', '%edit own practitioner profile%', 'LIKE');
+  $query->fields('u', ['uid']);
+  $results = $query->execute()->fetchAll();
+  if(!empty($results)) {
+    foreach ($results as $result) {
+      $user = user_load($result->uid);
+      if (!practitioner_has_profile($user->uid)) {
+        $users[$user->uid] = $user->name;
+      }
+    }
+  }
+  return $users;
+}

@@ -1,0 +1,410 @@
+<?php
+
+/**
+ * @file
+ * Implementation of Entity Appointment.
+ */
+
+use Drupal\appointment\Entity\Appointment;
+
+// Set default entity form in external file
+module_load_include('php', 'appointment', 'src/Form/appointment_form');
+// Set menu definitions in external file
+module_load_include('inc', 'appointment', 'appointment.routing');
+
+define('APPOINTMENT_STATE_NOT_CREATED', 0);
+define('APPOINTMENT_STATE_SCHEDULED', 1);
+define('APPOINTMENT_STATE_BOOKED', 2);
+define('APPOINTMENT_STATE_CANCELED_PRACTITIONER', 3);
+define('APPOINTMENT_STATE_CANCELED_PATIENT', 4);
+define('APPOINTMENT_STATE_CANCELED_ADMIN', 5);
+define('APPOINTMENT_STATE_CHANGED', 6);
+define('APPOINTMENT_STATE_ATTENDED', 7);
+define('APPOINTMENT_STATE_NOT_ATTENDED', 8);
+
+/**
+ * Implements hook_entity_info().
+ */
+
+function appointment_entity_info() {
+  $return['appointment'] = [
+    'label' => t('Appointment'),
+    // The entity class and controller class extend the default entity classes.
+    'entity class' => 'Drupal\appointment\Entity\Appointment',
+    'controller class' => 'Drupal\appointment\Entity\AppointmentController',
+    'views controller class' => 'EntityDefaultViewsController',
+    'extra fields controller class' => 'Drupal\appointment\Entity\AppointmentExtraFieldsController',
+    'metadata controller class' => 'Drupal\appointment\Entity\AppointmentMetadataController',
+    'base table' => 'appointment',
+    'fieldable' => TRUE,
+    'exportable' => TRUE,
+    'entity keys' => [
+      'id' => 'id',
+      'bundle' => 'bundle',
+    ],
+    // Bundles are defined by the types below.
+    'bundles' => [
+      'appointment' => [
+        'label' => t('Appointment'),
+        'admin' => [
+          'path' => 'admin/structure/appointment/manage',
+          'access arguments' => ['administer appointment'],
+        ],
+      ],
+    ],
+    'bundle keys' => ['bundle' => 'bundle'],
+    'label callback' => 'appointment_label',
+    'uri callback' => 'entity_class_uri',
+    'access callback' => 'appointment_access',
+    'module' => 'appointment',
+    // The information below is used by the Controller;
+    // which extends the EntityDefaultUIController.
+    'admin ui' => [
+      'path' => 'admin/content/appointment',
+      'file' => 'src/Form/appointment_form.php',
+      'controller class' => 'Drupal\appointment\Entity\AppointmentUIController',
+      'menu wildcard' => '%appointment',
+    ],
+    'view modes' => [
+      'next' => [
+        'label' => 'Next appointment',
+        'custom settings' => TRUE,
+      ],
+      'last' => [
+        'label' => 'Last appointment',
+        'custom settings' => TRUE,
+      ],
+    ],
+  ];
+
+  return $return;
+}
+
+
+
+function appointment_bundle_config() {
+  drupal_goto('admin/content/appointment');
+}
+
+
+
+/**
+ * Implements hook_permission().
+ */
+function appointment_permission() {
+  // We set up permisssions to manage entity types, manage all entities and the
+  // permissions for each individual entity.
+  $permissions = [
+    'administer appointment' => [
+      'title' => t('Administer Appointments'),
+      'description' => t('Edit and delete all Appointment'),
+    ],
+    'create appointment' => [
+      'title' => 'Create appointment',
+    ],
+    'book appointment' => [
+      'title' => 'Book appointment',
+    ],
+    'view any appointment' => [
+      'title' => 'View any appointment',
+    ],
+    'view own appointment' => [
+      'title' => 'View own appointment',
+    ],
+    'edit any appointment' => [
+      'title' => 'Edit any appointment',
+    ],
+    'edit own appointment' => [
+      'title' => 'Edit own appointment',
+    ],
+  ];
+
+  return $permissions;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function appointment_theme() {
+  return array(
+    'appointment' => array(
+      'render element' => 'elements',
+      'template' => 'appointment',
+    ),
+  );
+}
+
+/**
+ * Implements hook_preprocess_entity().
+ */
+function appointment_preprocess_entity(&$variables) {
+  $entity_type = $variables['elements']['#entity_type'];
+  if($entity_type == 'appointment') {
+    $variables['theme_hook_suggestions'] = [];
+    $variables['theme_hook_suggestions'][] = $entity_type;
+    $variables['theme_hook_suggestions'][] = $entity_type . '__' . $variables['view_mode'];
+    $variables['theme_hook_suggestions'][] = $entity_type . '__' . $variables['id'];
+  }
+}
+
+/**
+ * Implements hook_date_popup_process_alter().
+ */
+function appointment_date_popup_process_alter(&$element, &$form_state, $context) {
+ if (isset($context['form']) && $context['form']['#form_id'] == 'appointment_form' && isset($element['date'])) {
+   $element['date']['#title_display'] = 'invisible';
+   $element['date']['#description'] = NULL;
+ }
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function appointment_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Add action link 'admin/structure/appointment/add'
+  // on 'admin/structure/appointment'.
+  if ($root_path == 'admin/content/appointment') {
+    $item = menu_get_item('admin/content/appointment/add');
+    if ($item['access']) {
+      $data['actions']['output'][] = array(
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      );
+    }
+  }
+}
+
+/**
+ * Determines whether the given user has access to a Appointment.
+ *
+ * @param string $op
+ *   The operation being performed. One of 'view', 'update', 'create', 'delete'
+ *   or just 'edit' (being the same as 'create' or 'update').
+ *
+ * @param Appointment $appointment
+ *   Optionally a Appointment or a Appointment type to check access for.
+ *   If nothing is given, access for all Appointment is determined.
+ *
+ * @param object $account
+ *   The user to check for. Leave it to NULL to check for the global user.
+ *
+ * @return bool
+ *   Whether access is allowed or not.
+ */
+function appointment_access($op, Appointment $appointment = NULL, $account = NULL) {
+  if(!$account) {
+    global $user;
+    $account = $user;
+  }
+  
+  if (user_access('administer appointment', $account)) {
+    return TRUE;
+  }
+  
+  $is_practitioner = FALSE;
+  $is_patient = FALSE;
+  
+  if($appointment && $appointment->practitioner && practitioner_has_profile($account->uid)) {
+    $practitioner = practitioner_load_from_uid($account->uid);
+    $is_practitioner = $appointment->practitioner == $practitioner->id;
+  }
+  
+  if($appointment && $appointment->patient && patient_has_profile($account->uid)) {
+    $patient = patient_load_from_uid($account->uid);
+    $is_patient = $appointment->patient == $patient->id;
+  }
+  
+  switch ($op) {
+    case 'view':
+      return user_access('view any appointment');
+      break;
+    case 'assign':
+      return user_access('edit any appointment');
+      break;
+    case 'edit':
+    case 'update':
+      return user_access('edit any appointment') || user_access('edit own appointment') && $is_practitioner;
+      break;
+    case 'cancel':
+    case 'change':
+      return user_access('edit any appointment') || user_access('edit own appointment') && $is_practitioner || $is_patient;
+      break;
+    case 'feedback':
+      return $is_patient;
+    case 'room':
+      return $is_patient || $is_practitioner;
+      break;
+  }
+
+
+  return FALSE;
+}
+
+/**
+ * Entity label callback.
+ */
+function appointment_label($entity, $entity_type) {
+  
+  return $entity->label();
+  
+}
+
+
+/**
+ * Fetch a Appointment object.
+ *
+ * @param int $id
+ *   Integer specifying the appointment id.
+ *
+ * @return object
+ *   A fully-loaded object or FALSE if it cannot be loaded.
+ *
+ * @see entity_load_single()
+ */
+function appointment_load($id) {
+  return entity_load_single('appointment', $id);
+}
+
+/**
+ * Load multiple Appointment based on certain conditions.
+ *
+ * @param array $ids
+ *   An array of Appointment IDs.
+ *
+ * @param array $conditions
+ *   An array of conditions to match against the appointment table.
+ *
+ * @param bool $reset
+ *   A boolean indicating that the internal cache should be reset.
+ *
+ * @return array
+ *   An array of objects, indexed by id.
+ *
+ * @see entity_load()
+ * @see appointment_load()
+ */
+function appointment_load_multiple($ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('appointment', $ids, $conditions, $reset);
+}
+
+/**
+ * Deletes a Appointment.
+ */
+function appointment_delete(Appointment $appointment) {
+  $appointment->delete();
+}
+
+/**
+ * Delete multiple Appointment.
+ *
+ * @param array $ids
+ *   An array of Appointment IDs.
+ */
+function appointment_delete_multiple(array $ids) {
+  return entity_delete_multiple('appointment', $ids);
+}
+
+/**
+ * Create a Appointment object.
+ */
+function appointment_create($values = array()) {
+  return entity_create('appointment', $values);
+}
+
+/**
+ * Saves a Appointment to the database.
+ *
+ * @param string $appointment
+ *   The Appointment object.
+ */
+function appointment_save($appointment) {
+  return entity_save('appointment', $appointment);
+}
+
+
+/**
+ * Menu title callback for showing individual entities.
+ */
+function appointment_page_title(Appointment $appointment) {
+  return $appointment->label();
+}
+
+/**
+ * Sets up content to show an individual Appointment.
+ */
+function appointment_view($appointment, $view_mode = 'full') {
+  return entity_view('appointment', array($appointment), $view_mode);
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function appointment_form_alter(&$form, &$form_state, $form_id) {
+
+}
+
+/**
+ * @param string $mode
+ *
+ * default | short
+ *
+ * @return array
+ */
+
+function appointment_get_states($mode = 'default') {
+  
+  switch ($mode) {
+    case 'short':
+      $states = [
+        APPOINTMENT_STATE_NOT_CREATED => 'not created',
+        APPOINTMENT_STATE_SCHEDULED => 'scheduled',
+        APPOINTMENT_STATE_BOOKED => 'booked',
+        APPOINTMENT_STATE_CANCELED_PRACTITIONER => 'canceled by practitioner',
+        APPOINTMENT_STATE_CANCELED_PATIENT => 'canceled by patient',
+        APPOINTMENT_STATE_CANCELED_ADMIN => 'canceled by admin',
+        APPOINTMENT_STATE_CHANGED => 'changed',
+        APPOINTMENT_STATE_ATTENDED => 'attended',
+        APPOINTMENT_STATE_NOT_ATTENDED => 'not attended',
+      ];
+      break;
+    default:
+      $states = [
+        APPOINTMENT_STATE_NOT_CREATED => 'not created',
+        APPOINTMENT_STATE_SCHEDULED => 'scheduled',
+        APPOINTMENT_STATE_BOOKED => 'booked',
+        APPOINTMENT_STATE_CANCELED_PRACTITIONER => 'canceled by practitioner',
+        APPOINTMENT_STATE_CANCELED_PATIENT => 'canceled by patient',
+        APPOINTMENT_STATE_CANCELED_ADMIN => 'canceled by admin',
+        APPOINTMENT_STATE_CHANGED => 'changed',
+        APPOINTMENT_STATE_ATTENDED => 'finished, patient attended',
+        APPOINTMENT_STATE_NOT_ATTENDED => 'finished, patient did not attend',
+      ];
+      break;
+  }
+
+  return $states;
+}
+
+function appointment_get_attending_states() {
+  $states = [
+    0 => 'No',
+    1 => 'Yes',
+  ];
+  return $states;
+}
+
+
+function appointment_display_date($date, $date_end, $day_format = 'd/m/Y', $hour_format = 24, $separator = ' ') {
+  $day = date($day_format, $date);
+  switch ($hour_format) {
+    case 12:
+      $hour = date('g:i', $date) . '-' . date('g:ia', $date_end);
+      break;
+    case 24:
+    default:
+      $hour = date('H:i', $date) . '-' . date('H:i', $date_end);
+      break;
+      
+  }
+  return $day . $separator . $hour;
+}

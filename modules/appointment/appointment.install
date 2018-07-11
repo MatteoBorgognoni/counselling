@@ -1,0 +1,144 @@
+<?php
+
+/**
+ * @file
+ * appointment install schema.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function appointment_schema() {
+  $schema = array();
+
+  $schema['appointment'] = [
+    'description' => 'The base table for Appointment entities.',
+    'fields' => [
+      'id' => [
+        'description' => 'Primary Key: Identifier for a Appointment.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'bundle' => [
+        'description' => 'The bundle.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => 'appointment',
+      ],
+      'type' => [
+        'description' => 'The appointment type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'date' => [
+        'description' => 'The date timestamp of the Appointment.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+      'date_end' => [
+        'description' => 'The date end timestamp of the Appointment.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+      'time_start' => [
+        'description' => 'The starting time of the Appointment.',
+        'type' => 'varchar',
+        'length' => 8,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'time_end' => [
+        'description' => 'The ending time of the Appointment.',
+        'type' => 'varchar',
+        'length' => 8,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'patient' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL,
+        'description' => "The {patient}.id attending the Appointment.",
+      ],
+      'practitioner' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL,
+        'description' => "The {practitioner}.id hosting the Appointment.",
+      ],
+      'uid' => [
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL,
+        'description' => "The {users}.uid of the user holding the Appointment.",
+      ],
+      'attended' => [
+        'description' => 'The boolean representing the attended status of the Appointment',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => NULL,
+      ],
+      'state' => [
+        'description' => 'The integer representing the current state of the Appointment',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+      'feedback' => [
+        'description' => 'Feedback left from the patient',
+        'type' => 'text',
+        'size' => 'normal',
+        'default' => NULL,
+      ],
+      'score' => [
+        'description' => 'The score assigned to the Appointment by the patient',
+        'type' => 'int',
+        'size' => 'tiny',
+        'default' => NULL,
+      ],
+      'created' => [
+        'description' => 'The Unix timestamp when the Appointment was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+      'changed' => [
+        'description' => 'The Unix timestamp when the Appointment was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+    ] + entity_exportable_schema_fields(),
+    'primary key' => ['id'],
+    'foreign keys' => [
+      'appointment_patient' => [
+        'table' => 'patient',
+        'columns' => ['patient' => 'id'],
+      ],
+      'appointment_practitioner' => [
+        'table' => 'practitioner',
+        'columns' => ['practitioner' => 'id'],
+      ],
+      'appointment_author' => [
+        'table' => 'users',
+        'columns' => ['uid' => 'uid'],
+      ],
+    ],
+    'indexes' => [
+      'bundle' => ['bundle'],
+    ],
+  ];
+
+  return $schema;
+}
